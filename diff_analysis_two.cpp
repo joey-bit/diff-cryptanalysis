@@ -16,8 +16,8 @@ int s_box_transform(int);
 int permutation_transform(int);
 std::array<int, 16> run_spn(const std::array<int, 16> &); // run full SPN
 void subkey_five_attack(void);
-void attack_partial_one(void);
-void attack_partial_two(void);
+std::tuple<int,int, float> attack_partial_one(void);
+std::tuple<int,int, float> attack_partial_two(void);
 
 //-----------------Probability Functions and Generators-------------------//
 std::array<std::array<int, 16>, 16> build_characteristic(void);
@@ -100,8 +100,9 @@ int main()
     key_gen();
     prob_characteristic = build_characteristic();
     auto best_diffs = compute_best_differences();
-    attack_partial_one();
-    attack_partial_two();
+    auto [k2, k4, p1] = attack_partial_one(); //Get K2 and K4
+    auto [k1, k3, p2] = attack_partial_two(); //Get K1 and K3
+    printf("The fifth round subkey is: [ %d %d %d %d ] with probability %.3f%\n", k1, k2, k3, k4, p1*p2*100);
     return 0;
 }
 
@@ -175,11 +176,11 @@ int run_spn(int plaintext)
 }
 
 // We will attack the cipher using the most probable input to output difference of:
-//  0xB0B0 -> 0x0808 most probable
+//  0xB0B0 -> 0x8080 most probable
 //  0x0B00 -> 0x0606 from the document
 
 // Returns Partial K2 and K4 using 0x0B00 input diff
-void attack_partial_one(void)
+std::tuple<int,int, float> attack_partial_one(void)
 {
     auto plaintext_pairs = generate_plaintext_pairs(0x0b00);              // Generate plaintext pairs
     auto random_indices = getRandomIndices(5000, plaintext_pairs.size()); // Select 5000 random indices
@@ -225,12 +226,15 @@ void attack_partial_one(void)
     auto max_element = std::max_element(subkey_counts.begin(), subkey_counts.end()); // Get an iterator to the largest element in the array of counts
     auto subkey = std::distance(subkey_counts.begin(), max_element);                 // The index of that iterator is the distance from the beginning
     auto partials = hex_to_vector(subkey);                                           // Convert the value to a vector so we have X -> [K2 K4]
+    auto probability = float(*max_element) / 5000;                                    // Calculate the probability of the differential characteristic
     printf("Calculating from input difference of 0x0B00 (document example)\n");
     printf("Round 5 Partial K2: %d, K4: %d\n", partials[0], partials[1]);
+    printf("With probability: %.3f%\n\n", probability * 100);
+    return std::make_tuple(partials[0], partials[1], probability);
 }
 
 // Returns partial K1 and K3 using 0xB0B0 input difference
-void attack_partial_two(void)
+std::tuple<int, int, float> attack_partial_two(void)
 {
     auto plaintext_pairs = generate_plaintext_pairs(0xB0B0);
 
@@ -278,9 +282,12 @@ void attack_partial_two(void)
     auto max_element = std::max_element(subkey_counts.begin(), subkey_counts.end());
     auto subkey = std::distance(subkey_counts.begin(), max_element);
     auto partials = hex_to_vector(subkey);
+    auto probability = float(*max_element) / 5000;
     printf("Calculataing from input difference of 0xB0B0 (from top 5)\n");
-    printf("Round 5 Partial K1: %d, K3: %d", partials[0], partials[1]);
+    printf("Round 5 Partial K1: %d, K3: %d\n", partials[0], partials[1]);
+    printf("With probability: %.3f%\n\n", probability * 100);
     std::array<int, 2> out = {partials[0], partials[1]};
+    return std::make_tuple(partials[0], partials[1], probability);
 }
 
 // Build difference characteristics for a given s-box
